@@ -3,7 +3,10 @@
 
 #include <QObject>
 #include <QAbstractListModel>
-
+#include <QFile>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonDocument>
 
 class TodoItem {
 public:
@@ -41,16 +44,26 @@ private:
 class TodoModel: public QAbstractListModel
 {
     Q_OBJECT
-
+    Q_PROPERTY(QString inputFile READ inputFile WRITE setInputFile NOTIFY inputFileChanged)
+signals:
+    void inputFileChanged();
 public:
-    TodoModel(QObject *parent = nullptr): QAbstractListModel(parent){
-
-        pTodoList.append(TodoItem("abc", false));
-        pTodoList.append(TodoItem("xyz", true));
-        pTodoList.append(TodoItem("aaaa", true));
-
+    QString inputFile()const {
+        return pInputFile;
     }
+    void setInputFile(QString const &inputFile){
+        if(pInputFile == inputFile){
+            return;
+        }
 
+        pInputFile = inputFile;
+
+        loadTodoListModelFromInputFile();
+
+        emit inputFileChanged();
+    }
+    TodoModel(QObject *parent = nullptr): QAbstractListModel(parent){
+    }
     enum TodoItemRoles{
         ContentRole = Qt::UserRole +1,
         IsDoneRole
@@ -93,7 +106,6 @@ public:
         }
     }
 
-
     Q_INVOKABLE void addItem(){
         beginInsertRows(QModelIndex(), rowCount(), rowCount());
         pTodoList.append(TodoItem("",false));
@@ -105,6 +117,34 @@ public:
         pTodoList.remove(index, 1);
         endRemoveRows();
     }
+
+    Q_INVOKABLE void saveTodoListModelToFile(){
+        QFile saveDoc(pInputFile);
+
+        if( !saveDoc.open(QIODevice::WriteOnly | QIODevice::Truncate)){
+            qWarning("Could not open file");
+            return;
+        }
+
+        QJsonObject rootObject;
+        QJsonArray todolistArray;
+
+        for(int index =0; index< pTodoList.size(); index++){
+
+            QJsonObject todoItemJson;
+            todoItemJson["noidung"] = pTodoList[index].content();
+            todoItemJson["trangthai"] = pTodoList[index].isDone();
+            todolistArray.append(todoItemJson);
+        }
+
+        rootObject["todolist"] = todolistArray;
+
+        auto writeContent = QJsonDocument(rootObject).toJson();
+        saveDoc.write(writeContent);
+        saveDoc.close();
+
+    }
+
 protected:
     QHash<int, QByteArray> roleNames() const override{
         QHash<int, QByteArray> roles;
@@ -116,6 +156,40 @@ protected:
 
 private:
     QList<TodoItem> pTodoList;
+    QString pInputFile;
+
+    void loadTodoListModelFromInputFile(){
+
+        QFile loadDoc(pInputFile);
+
+        if( !loadDoc.open(QIODevice::ReadOnly)){
+            qWarning("Could not open file");
+            return;
+        }
+
+        auto fileContent = loadDoc.readAll();
+        QJsonDocument saveFileDoc = QJsonDocument::fromJson(fileContent);
+
+        QJsonObject rootObject = saveFileDoc.object();
+
+        if(rootObject.contains("todolist") && rootObject["todolist"].isArray()){
+
+            auto todolistJsonArray = rootObject["todolist"].toArray();
+            QList<TodoItem> newTodoList;
+            for(int index =0; index < todolistJsonArray.size(); index++){
+                auto jsonTodoItem = todolistJsonArray[index].toObject();
+                auto newTodoItem = TodoItem( jsonTodoItem["noidung"].toString(),jsonTodoItem["trangthai"].toBool());
+                newTodoList.append(newTodoItem);
+            }
+            beginResetModel();
+            pTodoList = newTodoList;
+            endResetModel();
+            loadDoc.close();
+        }else{
+            qWarning("file not contain todolist key");
+            return;
+        }
+    }
 };
 
 #endif // TODOMODEL_H

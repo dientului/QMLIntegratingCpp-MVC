@@ -8,7 +8,6 @@ Window {
     height: 480
     visible: true
     title: qsTr("Hello World")
-
 //    ListModel{
 //        id: myModel
 //        ListElement{
@@ -24,13 +23,13 @@ Window {
 
     TodoModel{
         id: myModel
+        inputFile: "saveFile.json" // relative path  -> absolute path: <working directory> + <relative path> -> access file tren disk
     }
 
     ListView{
         id: myTodoList
         anchors.fill: parent
         model: myModel
-        height: parent.height
         header: Row{
             Button{
                 text: "append/add"
@@ -38,14 +37,22 @@ Window {
                     myModel.addItem()
                 }
             }
+            Button{
+                text: "save"
+                onClicked: {
+                    myModel.saveTodoListModelToFile()
+                }
+            }
         }
+        spacing: 20
 
         delegate: Row{
             width: parent.width
+            anchors.left: parent.left
+            anchors.leftMargin: 20
             TextField{
                 text: noidung
                 width: parent.width -200
-                anchors.leftMargin: 20
                 onTextEdited: {
                     noidung = text
                 }
